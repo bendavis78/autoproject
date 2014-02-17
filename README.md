@@ -27,8 +27,8 @@ When you enter a project directory, whether it's the root project dir or any
 subdir of that project, the ``$PROJECT_DIR`` and ``$PROJECT`` environment
 variables will be available to you.
 
-In order to add custom actions, define a file with an enter() function and an
-exit() function. For actions that you'd like to execute for any project
+In order to add custom actions, define a file with an ``enter()`` function and a
+``leave()`` function. For actions that you'd like to execute for any project
 directory, you can define it globally in ``~/.project``. For actions that you'd
 like to define for a specific project, place the file named ``.project`` in the
 ``$PROJECT_DIR``.
