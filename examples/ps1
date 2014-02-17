@@ -1,0 +1,12 @@
+#!/bin/bash
+. $HOME/.bash_colors
+
+enter() {
+    export OLD_PS1=$PS1
+    export PS1="\[$B_Green\]\u@\h \[$B_Yellow\][$PROJECT] \[$B_Blue\]\W \$ \[$Reset\]" 
+}
+
+leave() {
+    PS1=$OLD_PS1
+    unset OLD_PS1
+}

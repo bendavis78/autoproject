@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# This example assumes your $PROJECT_DIR contains the virtualenv in a directory
+# named "env", and your django project in a directory named "src".
+
+enter() {
+    source $PROJECT_DIR/env/bin/activate 2>/dev/null &&
+    if [ -f $PROJECT_DIR/src/manage.py ]; then
+        # Detect django 1.4 settings module. Older projects can manually set it in $PROJECT_DIR/.project
+        perl='$str=<>; print "$1\n" if $str =~ /os.environ.setdefault\(\s*"DJANGO_SETTINGS_MODULE"\s*,\s*"(.*?)"/s'
+        settings_mod=`cat manage.py | perl -0e "$perl"`
+        if [ -z "$settings_mod" ]; then
+            settings_mod="settings"
+        fi
+        if [ -n "$settings_mod" ]; then
+            export DJANGO_SETTINGS_MODULE=$settings_mod
+        fi
+    fi
+}
+
+leave() {
+    unset DJANGO_SETTINGS_MODULE
+    deactivate 2>/dev/null
+}

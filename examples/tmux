@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Sets the tmux session name and default path once you enter a project dir.
+
+enter() {
+    export TMUX_OLD_SESSION=$(tmux display-message -p '#S')
+    tmux rename-session $PROJECT 2> /dev/null
+    tmux set default-path $PROJECT_DIR | cat > /dev/null
+}
+
+leave() {
+    tmux rename-session $TMUX_OLD_SESSION 2> /dev/null
+    tmux set default-path $HOME | cat > /dev/null
+    unset TMUX_OLD_SESSION
+}

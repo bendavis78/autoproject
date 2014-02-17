@@ -1,0 +1,155 @@
+#!/bin/bash
+
+# Autoproject is a simple bash script that acts as your "prompt command", and
+# allows you execute custom actions when you enter or leave a project directory.
+# For example, if you're working on a python project, you could automatically
+# activate your virtualenv when you enter your source directory. You could also
+# change your command prompt to indicate the project you're working on
+# 
+# To use Autoproject, place this file somewhere in your ``$PATH``
+# 
+# add the following lines to your .bashrc:
+# 
+#     source "autoproject" # this filename
+#     PROMPT_COMMAND="autoproject_init"
+# 
+# You can override any of the environment variables show at the top of this
+# script. You'll most likely want to set your own ``PROJECT_PATTERN``. This is a
+# regex that tells the script whether or not you're inside a project directory.
+# You'll need two capturing groups in the regex as well. One for the absolute path
+# to the project, and one for the project name (the unique identifier for the
+# project). See the default ``PROJECT_PATTERN`` below for an example.
+# 
+# If you want to change which capturing groups deterimine the project path and
+# project name, you can change ``PROJECT_DIR_MATCH`` and ``PROJECT_NAME_MATCH``.
+# If you want to get even more custom, you can set ``PROJECT_DIR_CMD`` and
+# ``PROJECT_NAME_CMD``.
+# 
+# When you enter a project directory, whether it's the root project dir or any
+# subdir of that project, the ``$PROJECT_DIR`` and ``$PROJECT`` environment
+# variables will be available to you.
+# 
+# In order to add custom actions, define a file with an enter() function and an
+# exit() function. For actions that you'd like to execute for any project
+# directory, you can define it globally in ``~/.project``. For actions that you'd
+# like to define for a specific project, place the file named ``.project`` in the
+# ``$PROJECT_DIR``.
+# 
+#  For example, to customize your PS1 when you enter a project, add this to your
+#  .project file:
+# 
+#     #!/bin/bash
+# 
+#     enter() {
+#         export OLD_PS1=$PS1
+#         export PS1="\u@\h [$PROJECT] \W \$"
+#     }
+# 
+#     leave() {
+#         export PS1=$OLD_PS1
+#         unset OLD_PS1
+#     }
+# 
+# You may also define a global directory in which you keep a set of project
+# scripts that are automatically loaded each time. This can help keep your
+# customizations more modular so that you can disable/enable features as you like.
+# To do this, simply define ``AUTOPROJECT_SCRIPTS_DIR`` and point it to that
+# directory. By default, this is set to ``~/.autoproject/autoload/``. But you may
+# keep them wherever you like. To easily enable/disable scripts, you can keep your
+# scripts in ``~/.autoproject/scripts/``, and symlink them to
+# ``~/.autoproject/autoload/``. 
+# 
+# When you enter a project dir, each script in the autoload directory is executed
+# in order. When leave a project dir, they are executed in reverse order. So if
+# once script has a dependency on the other, you'll need make sure you name the
+# files such that they'll be in the right order (eg, prefix with
+# ``0_firstscript``, ``1_secondsecript``, etc...).
+
+
+AUTOPROJECT_DEBUG=1
+AUTOPROJECT_SCRIPTS_DIR="$HOME/.autoproject/autoload"
+PROJECT_BASE_DIR="$HOME/Projects"
+PROJECT_PATTERN="^($PROJECT_BASE_DIR/([^/]+))"
+PROJECT_DIR_MATCH=1
+PROJECT_NAME_MATCH=2
+PROJECT_DIR_CMD="_get_project_dir"
+PROJECT_NAME_CMD="_get_project_name"
+
+autoproject_init() {
+    _check_project
+}
+
+_get_project_name() {
+    local name=${BASH_REMATCH[PROJECT_NAME_MATCH]}
+    if [[ -z "$name" ]]; then
+        name=$PROJECT_DIR
+    fi
+    echo $name
+}
+
+_get_project_dir() {
+    echo ${BASH_REMATCH[PROJECT_DIR_MATCH]}
+}
+
+_get_scripts() {
+    echo "$HOME/.project"
+    echo "$PROJECT_DIR/.project"
+    ls -1 "$AUTOPROJECT_SCRIPTS_DIR/"*
+}
+
+_check_project() {
+
+    # TODO support multiple types of project patterns and set PROJECT_TYPE
+    if [[ $PWD =~ $PROJECT_PATTERN ]]; then
+        
+        # Get the project dir and name values
+        local project_dir=$($PROJECT_DIR_CMD)
+        local project_name=$($PROJECT_NAME_CMD)
+        if [[ -z "$project_dir" ]]; then
+            echo "ERROR: autoproject: Could not determine project root path." >&2
+            return 1
+        fi
+        if [[ -z "$project_name" ]]; then
+            echo "ERROR: autoproject: Could not determine project name." >&2
+            return 1
+        fi
+        
+        if [[ -z "$PROJECT" ]]; then
+            # Entered new project dir
+            export PROJECT_DIR=$project_dir
+            export PROJECT=$project_name
+            _enter_project
+        elif [[ $PROJECT != $project_name ]]; then
+            # We switched project dirs
+            _leave_project
+            export PROJECT_DIR=$project_dir
+            export PROJECT=$project_name
+            _enter_project
+        fi
+    else
+        if [[ $PROJECT != "" ]]; then
+            # Leaving project dir
+            _leave_project scripts[@]
+            unset PROJECT_DIR
+            unset PROJECT
+        fi
+    fi
+}
+
+_enter_project() {
+    local -a scripts=($(_get_scripts))
+    for script in ${scripts[@]}; do
+        [[ -r $script ]] && source $script
+        [[ "`type -t enter`" == "function" ]] && enter
+        unset -f enter
+    done
+}
+
+_leave_project() {
+    local -a scripts=($(_get_scripts | tac))
+    for script in ${scripts[@]}; do
+        [[ -r $script ]] && source $script
+        [[ "`type -t leave`" == "function" ]] && leave
+        unset -f leave
+    done
+}
