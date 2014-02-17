@@ -9,7 +9,7 @@ To use Autoproject, place this file somewhere in your ``$PATH``
 add the following lines to your .bashrc:
 
     source "autoproject" # this filename
-    PROMPT_COMMAND="autoproject"
+    PROMPT_COMMAND="autoproject_init"
 
 You can override any of the environment variables show at the top of this
 script. You'll most likely want to set your own ``PROJECT_PATTERN``. This is a
