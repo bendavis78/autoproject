@@ -65,8 +65,7 @@
 # files such that they'll be in the right order (eg, prefix with
 # ``0_firstscript``, ``1_secondsecript``, etc...).
 
-
-AUTOPROJECT_DEBUG=1
+AUTOPROJECT_DEBUG=0
 AUTOPROJECT_SCRIPTS_DIR="$HOME/.autoproject/autoload"
 PROJECT_BASE_DIR="$HOME/Projects"
 PROJECT_PATTERN="^($PROJECT_BASE_DIR/([^/]+))"
@@ -118,38 +117,68 @@ _check_project() {
             # Entered new project dir
             export PROJECT_DIR=$project_dir
             export PROJECT=$project_name
-            _enter_project
+            _enter_or_leave "ENTER"
         elif [[ $PROJECT != $project_name ]]; then
             # We switched project dirs
-            _leave_project
+            _debug 3 "detected switch"
+            _enter_or_leave "LEAVE"
             export PROJECT_DIR=$project_dir
             export PROJECT=$project_name
-            _enter_project
+            _enter_or_leave "ENTER"
         fi
     else
         if [[ $PROJECT != "" ]]; then
             # Leaving project dir
-            _leave_project scripts[@]
+            _enter_or_leave "LEAVE"
             unset PROJECT_DIR
             unset PROJECT
         fi
     fi
 }
 
-_enter_project() {
-    local -a scripts=($(_get_scripts))
-    for script in ${scripts[@]}; do
-        [[ -r $script ]] && source $script
-        [[ "`type -t enter`" == "function" ]] && enter
-        unset -f enter
-    done
+_debug (){
+    if [[ "$AUTOPROJECT_DEBUG" -ge "$1" ]]; then
+        echo -n "autoproject: $1: ";
+        [[ -n "$PROJECT_STATE" ]] && echo -n "$PROJECT_STATE: ";
+        if [[ "$PROJECT_SCRIPT" == $PROJECT_DIR* ]]; then
+            echo -n "${PROJECT_SCRIPT/#$PROJECT_DIR/$PROJECT}: ";
+        elif [[ "$PROJECT_SCRIPT" == $AUTOPROJECT_SCRIPTS_DIR* ]]; then
+            echo -n "${PROJECT_SCRIPT/#$AUTOPROJECT_SCRIPTS_DIR/autoload}: ";
+        elif [[ "$PROJECT_SCRIPT" == $HOME* ]]; then
+            echo -n "${script/#$HOME/~}: ";
+        elif [[ -n "$PROJECT_SCRIPT" ]]; then
+            echo -n "$PROJECT_SCRIPT: ";
+        fi
+        echo $2;
+    fi
 }
 
-_leave_project() {
-    local -a scripts=($(_get_scripts | tac))
+_enter_or_leave() {
+    _debug 2 "PROJECT_DIR=$PROJECT_DIR";
+    _debug 2 "PROJECT=$PROJECT";
+    export PROJECT_STATE=$1;
+    if [[ "$PROJECT_STATE" == "ENTER" ]]; then
+        func="enter"
+        sorter="cat"
+    else
+        func="leave"
+        sorter="tac"
+    fi
+    local -a scripts=($(_get_scripts | $sorter))
     for script in ${scripts[@]}; do
-        [[ -r $script ]] && source $script
-        [[ "`type -t leave`" == "function" ]] && leave
-        unset -f leave
+        export PROJECT_SCRIPT=$script;
+        if [[ -r $script ]]; then
+            _debug 1 "Loading script $script" &&
+            unset -f $func;
+            source $script;
+            if [[ "`type -t $func`" == "function" ]]; then
+                _debug 1 "Running $func()" &&
+                $func;
+            fi
+        else
+            _debug 3 "Skipped (not readable)"
+        fi
+        unset PROJECT_SCRIPT;
     done
+    unset PROJECT_STATE;
 }
