@@ -91,9 +91,9 @@ _get_project_dir() {
 }
 
 _get_scripts() {
-    echo "$HOME/.project"
-    echo "$PROJECT_DIR/.project"
-    ls -1 "$AUTOPROJECT_SCRIPTS_DIR/"*
+    echo $(realpath "$HOME/.project")
+    echo $(realpath "$PROJECT_DIR/.project")
+    ls -1 "$(realpath $AUTOPROJECT_SCRIPTS_DIR)/"*
 }
 
 _check_project() {
@@ -153,32 +153,67 @@ _debug (){
     fi
 }
 
+_in_array() {
+    local e
+    for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
+    return 1
+}
+
+_load_script() {
+    local script="$1";
+
+    script=$(realpath $script);
+
+    _in_array "$script" "${loaded_scripts[@]}" && return
+
+    local PROJECT_SCRIPT="$script";
+    if [[ -r $script ]]; then
+        _debug 1 "Loading script $script ($func)" &&
+        # allow scripts include others
+        loaded_scripts+=( "$script" );
+        load() {
+            _load_script "$AUTOPROJECT_SCRIPTS_DIR/$1"
+        }
+        export -f "load"
+        source $script;
+        local newfunc="${func}_${level}"
+        _rename_function "$func" "$newfunc"
+        if [[ "`type -t $newfunc`" == "function" ]]; then
+            _debug 1 "Running $func()" &&
+            $newfunc || return;
+        fi
+        unset -f $newfunc
+        unset -f "load_script"
+    else
+        _debug 3 "Skipped (not readable)"
+    fi
+}
+
+_copy_function() {
+    test -n "$(declare -f $1)" || return 
+    eval "${_/$1/$2}"
+}
+
+_rename_function() {
+    _copy_function $@ || return
+    unset -f $1
+}
+
 _enter_or_leave() {
     _debug 2 "PROJECT_DIR=$PROJECT_DIR";
     _debug 2 "PROJECT=$PROJECT";
-    export PROJECT_STATE=$1;
+    local PROJECT_STATE="$1";
+    local level=0;
     if [[ "$PROJECT_STATE" == "ENTER" ]]; then
-        func="enter"
-        sorter="cat"
+        local func="enter"
+        local sorter="cat"
     else
-        func="leave"
-        sorter="tac"
+        local func="leave"
+        local sorter="tac"
     fi
     local -a scripts=($(_get_scripts | $sorter))
+    local -a loaded_scripts=();
     for script in ${scripts[@]}; do
-        export PROJECT_SCRIPT=$script;
-        if [[ -r $script ]]; then
-            _debug 1 "Loading script $script" &&
-            unset -f $func;
-            source $script;
-            if [[ "`type -t $func`" == "function" ]]; then
-                _debug 1 "Running $func()" &&
-                $func;
-            fi
-        else
-            _debug 3 "Skipped (not readable)"
-        fi
-        unset PROJECT_SCRIPT;
+        _load_script $script $func;
     done
-    unset PROJECT_STATE;
 }
