@@ -91,9 +91,9 @@ _get_project_dir() {
 }
 
 _get_scripts() {
-    echo $(realpath "$HOME/.project")
-    echo $(realpath "$PROJECT_DIR/.project")
-    ls -1 "$(realpath $AUTOPROJECT_SCRIPTS_DIR)/"*
+    echo "$HOME/.project"
+    echo "$PROJECT_DIR/.project"
+    ls -1 "$AUTOPROJECT_SCRIPTS_DIR/"*
 }
 
 _check_project() {
@@ -117,39 +117,50 @@ _check_project() {
             # Entered new project dir
             export PROJECT_DIR=$project_dir
             export PROJECT=$project_name
-            _enter_or_leave "ENTER"
+            _debug 2 "PROJECT_DIR: $PROJECT_DIR";
+            _debug 2 "PROJECT: $PROJECT_DIR";
+            _do_event "SETUP"
+            _do_event "ENTER"
         elif [[ $PROJECT != $project_name ]]; then
             # We switched project dirs
             _debug 3 "detected switch"
-            _enter_or_leave "LEAVE"
+            _do_event "LEAVE"
+            _do_event "TRDWN"
             export PROJECT_DIR=$project_dir
             export PROJECT=$project_name
-            _enter_or_leave "ENTER"
+            _debug 2 "PROJECT_DIR: $PROJECT_DIR";
+            _debug 2 "PROJECT: $PROJECT";
+            _do_event "SETUP"
+            _do_event "ENTER"
         fi
     else
         if [[ $PROJECT != "" ]]; then
             # Leaving project dir
-            _enter_or_leave "LEAVE"
+            _debug 2 "PROJECT_DIR: $PROJECT_DIR";
+            _debug 2 "PROJECT: $PROJECT";
+            _do_event "LEAVE"
+            _do_event "TRDWN"
             unset PROJECT_DIR
             unset PROJECT
         fi
     fi
 }
 
-_debug (){
+_msg() {
+    local pad=$(( $maxnamewidth + 2 ))
+    local script_name=$(printf "%-${pad}s" "${SCRIPT_NAME}: ")
+    if [[ -n "$SCRIPT_NAME" ]]; then
+        echo -n "$script_name";
+    fi
+    echo -e "$1";
+}
+
+_debug() {
+
     if [[ "$AUTOPROJECT_DEBUG" -ge "$1" ]]; then
         echo -n "autoproject: $1: ";
         [[ -n "$PROJECT_STATE" ]] && echo -n "$PROJECT_STATE: ";
-        if [[ "$PROJECT_SCRIPT" == $PROJECT_DIR* ]]; then
-            echo -n "${PROJECT_SCRIPT/#$PROJECT_DIR/$PROJECT}: ";
-        elif [[ "$PROJECT_SCRIPT" == $AUTOPROJECT_SCRIPTS_DIR* ]]; then
-            echo -n "${PROJECT_SCRIPT/#$AUTOPROJECT_SCRIPTS_DIR/autoload}: ";
-        elif [[ "$PROJECT_SCRIPT" == $HOME* ]]; then
-            echo -n "${script/#$HOME/~}: ";
-        elif [[ -n "$PROJECT_SCRIPT" ]]; then
-            echo -n "$PROJECT_SCRIPT: ";
-        fi
-        echo $2;
+        _msg "$2";
     fi
 }
 
@@ -161,31 +172,42 @@ _in_array() {
 
 _load_script() {
     local script="$1";
+    [[ -n "$2" ]] && local func="$2";
 
-    script=$(realpath $script);
+    if _in_array "$script" "${loaded_scripts[@]}"; then
+        _debug 3 "Already loaded: $script"
+        return
+    fi
 
-    _in_array "$script" "${loaded_scripts[@]}" && return
-
-    local PROJECT_SCRIPT="$script";
     if [[ -r $script ]]; then
-        _debug 1 "Loading script $script ($func)" &&
+        script="$(realpath $script)";
+        local scriptname="$(basename $1)";
+        local SCRIPT_NAME="$scriptname";
+        _debug 2 "Loading script $script" &&
         # allow scripts include others
         loaded_scripts+=( "$script" );
-        load() {
-            _load_script "$AUTOPROJECT_SCRIPTS_DIR/$1"
+        _innerfunc() {
+            _debug 3 "Include: $1"
+            _load_script "$AUTOPROJECT_SCRIPTS_DIR/$1" $@
         }
-        export -f "load"
+        _rename_function _innerfunc $innerfunc;
+        _copy_function "_msg" "msg";
+        _copy_function "_debug" "debug";
+        export -f $innerfunc;
+        echo "TEST"
         source $script;
         local newfunc="${func}_${level}"
         _rename_function "$func" "$newfunc"
         if [[ "`type -t $newfunc`" == "function" ]]; then
-            _debug 1 "Running $func()" &&
+            _debug 1 "Running ${func}()" &&
             $newfunc || return;
         fi
-        unset -f $newfunc
-        unset -f "load_script"
+        unset -f $newfunc;
+        unset -f $innerfunc;
+        unset -f "msg";
+        unset -f "debug";
     else
-        _debug 3 "Skipped (not readable)"
+        _debug 3 "Skipped $script (not readable)"
     fi
 }
 
@@ -199,21 +221,42 @@ _rename_function() {
     unset -f $1
 }
 
-_enter_or_leave() {
-    _debug 2 "PROJECT_DIR=$PROJECT_DIR";
-    _debug 2 "PROJECT=$PROJECT";
+_do_event() {
     local PROJECT_STATE="$1";
     local level=0;
     if [[ "$PROJECT_STATE" == "ENTER" ]]; then
         local func="enter"
         local sorter="cat"
-    else
-        local func="leave"
+        local innerfunc="load"
+    elif [[ "$PROJECT_STATE" == "LEAVE" ]]; then
         local sorter="tac"
+        local func="leave"
+        local innerfunc="load"
+    elif [[ "$PROJECT_STATE" == "SETUP" ]]; then
+        local sorter="cat"
+        local func="setup"
+        local innerfunc="load"
+    elif [[ "$PROJECT_STATE" == "TRDWN" ]]; then
+        local sorter="tac"
+        local func="teardown"
+        local innerfunc="load"
     fi
+
+
     local -a scripts=($(_get_scripts | $sorter))
     local -a loaded_scripts=();
+
+    # calculate the max width of each script name for pretty debug output
+    local maxnamewidth=0
     for script in ${scripts[@]}; do
-        _load_script $script $func;
+        if [[ -f $script ]]; then
+            script=$(realpath $script);
+            local scriptname=$(basename $script);
+            (( ${#scriptname} > $maxnamewidth )) && maxnamewidth=${#scriptname}
+        fi
+    done
+
+    for script in ${scripts[@]}; do
+        _load_script $script;
     done
 }
