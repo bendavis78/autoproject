@@ -194,7 +194,6 @@ _load_script() {
         _copy_function "_msg" "msg";
         _copy_function "_debug" "debug";
         export -f $innerfunc;
-        echo "TEST"
         source $script;
         local newfunc="${func}_${level}"
         _rename_function "$func" "$newfunc"
