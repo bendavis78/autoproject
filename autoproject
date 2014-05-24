@@ -93,7 +93,7 @@ _get_project_dir() {
 _get_scripts() {
     echo "$HOME/.project"
     echo "$PROJECT_DIR/.project"
-    ls -1 "$AUTOPROJECT_SCRIPTS_DIR/"*
+    find "$AUTOPROJECT_SCRIPTS_DIR/" -maxdepth 2 -type f
 }
 
 _check_project() {
