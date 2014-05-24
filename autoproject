@@ -78,6 +78,7 @@ autoproject_init() {
     _check_project
 }
 
+
 _get_project_name() {
     local name=${BASH_REMATCH[PROJECT_NAME_MATCH]}
     if [[ -z "$name" ]]; then
@@ -119,27 +120,27 @@ _check_project() {
             export PROJECT=$project_name
             _debug 2 "PROJECT_DIR: $PROJECT_DIR";
             _debug 2 "PROJECT: $PROJECT_DIR";
-            _do_event "SETUP"
-            _do_event "ENTER"
+            _do_event "SETUP" || return 1
+            _do_event "ENTER" || return 1
         elif [[ $PROJECT != $project_name ]]; then
             # We switched project dirs
             _debug 3 "detected switch"
-            _do_event "LEAVE"
-            _do_event "TRDWN"
+            _do_event "LEAVE" || return 1
+            _do_event "TRDWN" || return 1
             export PROJECT_DIR=$project_dir
             export PROJECT=$project_name
             _debug 2 "PROJECT_DIR: $PROJECT_DIR";
             _debug 2 "PROJECT: $PROJECT";
-            _do_event "SETUP"
-            _do_event "ENTER"
+            _do_event "SETUP" || return 1
+            _do_event "ENTER" || return 1
         fi
     else
         if [[ $PROJECT != "" ]]; then
             # Leaving project dir
             _debug 2 "PROJECT_DIR: $PROJECT_DIR";
             _debug 2 "PROJECT: $PROJECT";
-            _do_event "LEAVE"
-            _do_event "TRDWN"
+            _do_event "LEAVE" || return 1
+            _do_event "TRDWN" || return 1
             unset PROJECT_DIR
             unset PROJECT
         fi
@@ -183,12 +184,12 @@ _load_script() {
         script="$(realpath $script)";
         local scriptname="$(basename $1)";
         local SCRIPT_NAME="$scriptname";
-        _debug 2 "Loading script $script" &&
+        _debug 2 "Loading script $script"
         # allow scripts include others
         loaded_scripts+=( "$script" );
         _innerfunc() {
             _debug 3 "Include: $1"
-            _load_script "$AUTOPROJECT_SCRIPTS_DIR/$1" $@
+            _load_script "$AUTOPROJECT_SCRIPTS_DIR/$1" $@ || return 1
         }
         _rename_function _innerfunc $innerfunc;
         _copy_function "_msg" "msg";
@@ -198,7 +199,7 @@ _load_script() {
         local newfunc="${func}_${level}"
         _rename_function "$func" "$newfunc"
         if [[ "`type -t $newfunc`" == "function" ]]; then
-            _debug 1 "Running ${func}()" &&
+            _debug 1 "Running ${func}()"
             $newfunc || return;
         fi
         unset -f $newfunc;
@@ -256,6 +257,6 @@ _do_event() {
     done
 
     for script in ${scripts[@]}; do
-        _load_script $script;
+        _load_script $script || return 1;
     done
 }
