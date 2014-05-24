@@ -52,21 +52,21 @@
 # 
 # You may also define a global directory in which you keep a set of project
 # scripts that are automatically loaded each time. This can help keep your
-# customizations more modular so that you can disable/enable features as you like.
-# To do this, simply define ``AUTOPROJECT_SCRIPTS_DIR`` and point it to that
-# directory. By default, this is set to ``~/.autoproject/autoload/``. But you may
-# keep them wherever you like. To easily enable/disable scripts, you can keep your
-# scripts in ``~/.autoproject/scripts/``, and symlink them to
-# ``~/.autoproject/autoload/``. 
+# customizations more modular so that you can disable/enable features as you
+# like.  To do this, simply define ``AUTOPROJECT_SCRIPTS_DIR`` and point it to
+# that directory. By default, this is set to ``~/.autoproject``. But you may
+# keep them wherever you like. To easily enable/disable scripts, you can keep
+# your scripts in another directory (e.g.: ``~/.autoproject/available/``), and
+# symlink them to ``~/.autoproject/``. 
 # 
-# When you enter a project dir, each script in the autoload directory is executed
+# When you enter a project dir, each script in the scripts directory is executed
 # in order. When leave a project dir, they are executed in reverse order. So if
 # once script has a dependency on the other, you'll need make sure you name the
 # files such that they'll be in the right order (eg, prefix with
 # ``0_firstscript``, ``1_secondsecript``, etc...).
 
 AUTOPROJECT_DEBUG=0
-AUTOPROJECT_SCRIPTS_DIR="$HOME/.autoproject/autoload"
+AUTOPROJECT_SCRIPTS_DIR="$HOME/.autoproject"
 PROJECT_BASE_DIR="$HOME/Projects"
 PROJECT_PATTERN="^($PROJECT_BASE_DIR/([^/]+))"
 PROJECT_DIR_MATCH=1
