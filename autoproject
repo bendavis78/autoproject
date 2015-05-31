@@ -75,9 +75,9 @@ PROJECT_DIR_CMD="_get_project_dir"
 PROJECT_NAME_CMD="_get_project_name"
 
 autoproject_init() {
+    _debug 3 "autoproject_init()"
     _check_project
 }
-
 
 _get_project_name() {
     local name=${BASH_REMATCH[PROJECT_NAME_MATCH]}
@@ -92,15 +92,17 @@ _get_project_dir() {
 }
 
 _get_scripts() {
+    find -L "$AUTOPROJECT_SCRIPTS_DIR/" -maxdepth 1 -type f
     echo "$HOME/.project"
     echo "$PROJECT_DIR/.project"
-    find "$AUTOPROJECT_SCRIPTS_DIR/" -maxdepth 2 -type f
 }
 
 _check_project() {
+    _debug 3 "check_project()"
 
     # TODO support multiple types of project patterns and set PROJECT_TYPE
     if [[ $PWD =~ $PROJECT_PATTERN ]]; then
+        _debug 3 "$PWD matches $PROJECT_PATTERN"
         
         # Get the project dir and name values
         local project_dir=$($PROJECT_DIR_CMD)
@@ -165,6 +167,10 @@ _debug() {
     fi
 }
 
+_scriptfail() {
+    SCRIPT_NAME=$1 _msg "script exited with non-zero status";
+}
+
 _in_array() {
     local e
     for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
@@ -181,7 +187,7 @@ _load_script() {
     fi
 
     if [[ -r $script ]]; then
-        script="$(realpath $script)";
+        script="$(readlink -f  $script)";
         local scriptname="$(basename $1)";
         local SCRIPT_NAME="$scriptname";
         _debug 2 "Loading script $script"
@@ -194,13 +200,18 @@ _load_script() {
         _rename_function _innerfunc $innerfunc;
         _copy_function "_msg" "msg";
         _copy_function "_debug" "debug";
+
+        # Source the script
         export -f $innerfunc;
+
         source $script;
+
+        # Run the event function
         local newfunc="${func}_${level}"
         _rename_function "$func" "$newfunc"
         if [[ "`type -t $newfunc`" == "function" ]]; then
             _debug 1 "Running ${func}()"
-            $newfunc || return;
+            $newfunc || _msg "${func}() failed" && return;
         fi
         unset -f $newfunc;
         unset -f $innerfunc;
@@ -221,9 +232,50 @@ _rename_function() {
     unset -f $1
 }
 
+_load_env() {
+    # Load/unload the script's env variables
+    if [[ $PROJECT_STATE == "ENTER" ]]; then
+        _debug 2 "Saving environment variables"
+        env -i bash -c "source $(pwd) && env" | 
+        for varname in "${!env[@]}"; do
+            if [[ -n "${!varname}" ]]; then
+                _debug 3 "Saving ${varname}=${!varname}";
+                PROJECT_SAVED_ENV+=("${varname}=${!varname}");
+            fi
+        done
+    elif [[ $PROJECT_STATE == "LEAVE" ]]; then
+        _debug 2 "Reading saved environment variables"
+        for line in "${PROJECT_SAVED_ENV[@]}"; do
+            value="${line#*=}";
+            varname="${line%%=*}";
+            _debug 3 "       $varname=${value}"; 
+            old_env[$varname]="${value}";
+        done
+    fi
+}
+
+_update_env() {
+    if [[ $PROJECT_STATE == "ENTER" ]]; then
+        for varname in "${!env[@]}"; do
+            _debug 3 "Setting ${varname}=${env[$varname]}";
+            export ${varname}="${env[$varname]}";
+        done
+    elif [[ $PROJECT_STATE == "LEAVE" ]]; then
+        _debug 2 "Restoring environment variables";
+        for varname in "${!old_env[@]}"; do
+            _debug 3 "Restoring ${varname}=${old_env[$varname]}";
+            export ${varname}="${old_env[$varname]}";
+        done
+        unset PROJECT_SAVED_ENV;
+    fi
+}
+
 _do_event() {
     local PROJECT_STATE="$1";
     local level=0;
+    local -A env;
+    local -A old_env;
+
     if [[ "$PROJECT_STATE" == "ENTER" ]]; then
         local func="enter"
         local sorter="cat"
@@ -242,21 +294,33 @@ _do_event() {
         local innerfunc="load"
     fi
 
-
     local -a scripts=($(_get_scripts | $sorter))
+    _debug 3 "SCRIPTS: $(printf "\n%s" "${scripts[@]}")"
     local -a loaded_scripts=();
-
+        
     # calculate the max width of each script name for pretty debug output
     local maxnamewidth=0
     for script in ${scripts[@]}; do
         if [[ -f $script ]]; then
-            script=$(realpath $script);
+            script=$(readlink -f $script);
             local scriptname=$(basename $script);
             (( ${#scriptname} > $maxnamewidth )) && maxnamewidth=${#scriptname}
         fi
     done
 
+    declare -A env;
+
+    # source scripts to load environment variables
+    if [[ "$PROJECT_STATE" == "ENTER" ]]; then
+        for script in ${scripts[@]}; do
+            [[ -f $script ]] && source $script;
+        done
+    fi
+
+    _load_env;
     for script in ${scripts[@]}; do
-        _load_script $script || return 1;
+        _load_script $script || SCRIPT_NAME=$script _msg "failed to load"
     done
+    _update_env;
+    unset env;
 }
