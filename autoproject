@@ -20,11 +20,6 @@
 # to the project, and one for the project name (the unique identifier for the
 # project). See the default ``PROJECT_PATTERN`` below for an example.
 #
-# If you want to change which capturing groups deterimine the project path and
-# project name, you can change ``PROJECT_DIR_MATCH`` and ``PROJECT_NAME_MATCH``.
-# If you want to get even more custom, you can set ``PROJECT_DIR_CMD`` and
-# ``PROJECT_NAME_CMD``.
-#
 # When you enter a project directory, whether it's the root project dir or any
 # subdir of that project, the ``$PROJECT_DIR`` and ``$PROJECT`` environment
 # variables will be available to you.
@@ -67,11 +62,9 @@
 
 AUTOPROJECT_DEBUG=0
 AUTOPROJECT_SCRIPTS_DIR="$HOME/.autoproject"
-PROJECT_BASE_DIR="$HOME/Projects"
-PROJECT_PATTERN="^($PROJECT_BASE_DIR/([^/]+))"
-PROJECT_DIR_MATCH=1
+#PROJECT_BASE_DIR="$HOME/Projects"
+PROJECT_PATTERN="^$" ## disabled by default
 PROJECT_NAME_MATCH=2
-PROJECT_DIR_CMD="_get_project_dir"
 PROJECT_NAME_CMD="_get_project_name"
 
 autoproject_init() {
@@ -80,15 +73,14 @@ autoproject_init() {
 
 
 _get_project_name() {
-    local name=${BASH_REMATCH[PROJECT_NAME_MATCH]}
-    if [[ -z "$name" ]]; then
-        name=$PROJECT_DIR
+    local dir="$1";
+    local name="";
+    if [[ $dir =~ $PROJECT_PATTERN ]]; then
+        local name=${BASH_REMATCH[PROJECT_NAME_MATCH]}
+    elif [[ -z "$name" ]]; then
+        name=$(basename $dir)
     fi
     echo $name
-}
-
-_get_project_dir() {
-    echo ${BASH_REMATCH[PROJECT_DIR_MATCH]}
 }
 
 _get_scripts() {
@@ -97,12 +89,25 @@ _get_scripts() {
     find "$AUTOPROJECT_SCRIPTS_DIR/" -maxdepth 2 -type f
 }
 
+_find_project_root() {
+    # Traverses parents and finds the first .project file or the first
+    # directory matching PROJECT_PATTERN
+    local dir="$PWD";
+    while [ "$dir" != "/" ]; do
+        if [[ $dir =~ $PROJECT_PATTERN || -f "$dir/.project" ]]; then
+            echo "$dir";
+            break;
+        fi
+        dir="$(dirname $dir)";
+    done;
+}
+
 _check_project() {
     # TODO support multiple types of project patterns and set PROJECT_TYPE
-    if [[ $PWD =~ $PROJECT_PATTERN ]]; then
+    local project_dir=$(_find_project_root);
+    if [ -n "$project_dir" ]; then
         # Get the project dir and name values
-        local project_dir=$($PROJECT_DIR_CMD)
-        local project_name=$($PROJECT_NAME_CMD)
+        local project_name=$($PROJECT_NAME_CMD $project_dir)
         if [[ -z "$project_dir" ]]; then
             echo "ERROR: autoproject: Could not determine project root path." >&2
             return 1
