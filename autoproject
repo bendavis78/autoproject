@@ -123,18 +123,18 @@ _check_project() {
             export PROJECT=$project_name
             _debug 2 "PROJECT_DIR: $PROJECT_DIR";
             _debug 2 "PROJECT: $PROJECT";
-            _do_event "SETUP" || return 1
+            #_do_event "SETUP" || return 1
             _do_event "ENTER" || return 1
         elif [[ $PROJECT != $project_name ]]; then
             # We switched project dirs
             _debug 3 "detected switch"
             _do_event "LEAVE" || return 1
-            _do_event "TRDWN" || return 1
+            #_do_event "TRDWN" || return 1
             export PROJECT_DIR=$project_dir
             export PROJECT=$project_name
             _debug 2 "PROJECT_DIR: $PROJECT_DIR";
             _debug 2 "PROJECT: $PROJECT";
-            _do_event "SETUP" || return 1
+            #_do_event "SETUP" || return 1
             _do_event "ENTER" || return 1
         fi
     else
@@ -143,7 +143,7 @@ _check_project() {
             _debug 2 "PROJECT_DIR: $PROJECT_DIR";
             _debug 2 "PROJECT: $PROJECT";
             _do_event "LEAVE" || return 1
-            _do_event "TRDWN" || return 1
+            #_do_event "TRDWN" || return 1
             unset PROJECT_DIR
             unset PROJECT
         fi
