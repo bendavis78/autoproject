@@ -86,7 +86,7 @@ _get_project_name() {
 _get_scripts() {
     echo "$HOME/.project"
     echo "$PROJECT_DIR/.project"
-    find "$AUTOPROJECT_SCRIPTS_DIR/" -maxdepth 2 -type f
+    find "$AUTOPROJECT_SCRIPTS_DIR/" -maxdepth 2 -type f -o -type l
 }
 
 _find_project_root() {
@@ -197,11 +197,11 @@ _load_script() {
         _rename_function _innerfunc $innerfunc;
         _copy_function "_msg" "msg";
         _copy_function "_debug" "debug";
-        export -f $innerfunc;
+        export -f $innerfunc &> /dev/null;
         source $script;
         local newfunc="${func}_${level}"
         _rename_function "$func" "$newfunc"
-        if [[ "`type -t $newfunc`" == "function" ]]; then
+        if typeset -f $newfunc &> /dev/null; then
             _debug 1 "Running ${func}()"
             $newfunc || local ec="$?";
             [[ -z "$ec" ]] && local ec="$?";
@@ -209,10 +209,10 @@ _load_script() {
                 _debug 1 "WARNING: ${func}() exited with code $ec";
             fi
         fi
-        unset -f $newfunc;
-        unset -f $innerfunc;
-        unset -f "msg";
-        unset -f "debug";
+        unset -f $newfunc &> /dev/null;
+        unset -f $innerfunc &> /dev/null;
+        unset -f "msg" &> /dev/null;
+        unset -f "debug" &> /dev/null;
     else
         _debug 3 "Skipped $script (not readable)"
     fi
@@ -225,7 +225,7 @@ _copy_function() {
 
 _rename_function() {
     _copy_function $@ || return
-    unset -f $1
+    unset -f $1 &> /dev/null;
 }
 
 _do_event() {
