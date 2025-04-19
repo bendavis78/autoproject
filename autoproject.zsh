@@ -25,24 +25,37 @@ autoproject::find_projectrc() {
     done;
 }
 
+autoproject::check_projectrc_allowed() {
+    [[ -z "$PROJECT_ID" ]] && return;
+
+    local allowed_file="$AUTOPROJECT_DATA_DIR/allowed/$PROJECT_ID";
+    [[ -f $allowed_file ]] || touch $allowed_file;
+    if ! md5sum -c $allowed_file &> /dev/null; then
+        echo -n "The .projectrc file has changed. Reload subshell? [y/N]: ";
+        read reload;
+        if [[ "${reload:l}" =~ ^[y](es)?$ ]]; then
+            md5sum $PROJECTRC > $allowed_file;
+            # Exit the current subshell with the special exit code
+            # This will trigger a reload in the parent shell
+            echo $PWD > "$AUTOPROJECT_STATE_DIR/$PROJECT_ID.exitdir";
+            exit $AUTOPROJECT_DIR_EXIT_CODE;
+        else
+            echo "Continuing with current environment (changes to .projectrc not applied)";
+            # Update the allowed file to prevent future prompts for the same file
+            md5sum $PROJECTRC > $allowed_file;
+        fi
+    fi
+}
+
+
+# This is run on precmd()
 autoproject::init() {
-    # FIXME: detect if .projectrc ($allowed_file) hash has changed. If it has, exit the environment before re-approving.
     local found_projectrc=$(autoproject::find_projectrc)
     if [[ -n "$found_projectrc" && -z "$PROJECTRC" ]]; then
         export PROJECTRC="$found_projectrc";
         export PROJECT_ID="$(readlink -f $PROJECTRC | md5sum | awk '{print $1}')";
-        local allowed_file="$AUTOPROJECT_DATA_DIR/allowed/$PROJECT_ID";
-        [[ -f $allowed_file ]] || touch $allowed_file;
-        if ! md5sum -c $allowed_file &> /dev/null; then
-            echo -n "Allow $PROJECTRC? [y/N]: ";
-            read allowed;
-            if [[ "${allowed:l}" =~ ^[y](es)?$ ]]; then
-                md5sum $PROJECTRC > $allowed_file;
-            else
-                echo "ignoring $PROJECTRC";
-                return;
-            fi
-        fi
+        autoproject::check_projectrc_allowed;
+
         # Enter subshell
         zsh -i;
         # Subshell has exited
