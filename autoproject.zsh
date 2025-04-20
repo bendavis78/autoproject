@@ -25,24 +25,36 @@ autoproject::find_projectrc() {
     done;
 }
 
-autoproject::check_projectrc_allowed() {
-    [[ -z "$PROJECT_ID" ]] && return;
+autoproject::get_project_id() {
+    local projectrc=$(autoproject::find_projectrc);
+    if [[ -n "$projectrc" ]]; then
+        readlink -f $projectrc | md5sum | awk '{print $1}';
+        return 0;
+    fi
+    return 1;
+}
 
-    local allowed_file="$AUTOPROJECT_DATA_DIR/allowed/$PROJECT_ID";
+autoproject::check_projectrc_allowed() {
+    local project_id="$(autoproject::get_project_id)";
+    local projectrc=$(autoproject::find_projectrc);
+
+    [[ -z "$project_id" || -z "$projectrc" ]] && return;
+
+    local allowed_file="$AUTOPROJECT_DATA_DIR/allowed/$project_id";
     [[ -f $allowed_file ]] || touch $allowed_file;
     if ! md5sum -c $allowed_file &> /dev/null; then
-        echo -n "The .projectrc file has changed. Reload subshell? [y/N]: ";
+        echo -n "The .projectrc file has changed. Reload shell? [y/N]: ";
         read reload;
         if [[ "${reload:l}" =~ ^[y](es)?$ ]]; then
-            md5sum $PROJECTRC > $allowed_file;
+            md5sum $projectrc > $allowed_file;
             # Exit the current subshell with the special exit code
             # This will trigger a reload in the parent shell
-            echo $PWD > "$AUTOPROJECT_STATE_DIR/$PROJECT_ID.exitdir";
+            echo $PWD > "$AUTOPROJECT_STATE_DIR/$project_id.exitdir";
             exit $AUTOPROJECT_DIR_EXIT_CODE;
         else
             echo "Continuing with current environment (changes to .projectrc not applied)";
             # Update the allowed file to prevent future prompts for the same file
-            md5sum $PROJECTRC > $allowed_file;
+            md5sum $projectrc > $allowed_file;
         fi
     fi
 }
@@ -50,14 +62,22 @@ autoproject::check_projectrc_allowed() {
 
 # This is run on precmd()
 autoproject::init() {
-    local found_projectrc=$(autoproject::find_projectrc)
+    autoproject::check_projectrc_allowed;
+    local found_projectrc="$(autoproject::find_projectrc)";
+
     if [[ -n "$found_projectrc" && -z "$PROJECTRC" ]]; then
         export PROJECTRC="$found_projectrc";
-        export PROJECT_ID="$(readlink -f $PROJECTRC | md5sum | awk '{print $1}')";
-        autoproject::check_projectrc_allowed;
+    fi
+
+    # If we can identify the project_id, and PROJECT_ID is not yet set in env,
+    # we're ready to enter the subshell.
+    local found_project_id="$(autoproject::get_project_id)";
+    if [[ -n "$found_project_id" && -z "$PROJECT_ID" ]]; then
+        export PROJECT_ID="$found_project_id";
 
         # Enter subshell
         zsh -i;
+
         # Subshell has exited
         local exit_code="$?";
         local project_id="$PROJECT_ID";
@@ -68,9 +88,20 @@ autoproject::init() {
             if [[ -f "$exitdir_file" ]]; then
                 cd "$(cat $exitdir_file)";
                 rm "$exitdir_file";
+                
+                # Immediately re-process the project environment
+                # Clear the environment variables to force re-initialization
+                unset PROJECTRC;
+                unset PROJECT_ID;
+                unset PROJECT_DIR;
+                unset PROJECT;
+                
+                # Call init again to immediately process the new .projectrc
+                autoproject::init;
             fi
         else
             # Normal exit
+            echo "Normal exit"
             exit $exit_code;
         fi
     elif [[ -n "$PROJECTRC" && -z "$PROJECT_DIR" ]]; then
