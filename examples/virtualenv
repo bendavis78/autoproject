@@ -1,0 +1,16 @@
+[[ -n "$VIRTUALENVS_HOME" ]] && [[ -d "$VIRTUALENVS_HOME/$PROJECT" ]] && VENV_DIR="$VIRTUALENVS_HOME/$PROJECT"
+[[ -d "$PROJECT_DIR/.venv" ]] && VENV_DIR="$PROJECT_DIR/.venv"
+[[ -d "$PROJECT_DIR/venv" ]] && VENV_DIR="$PROJECT_DIR/venv"
+
+autoproject::virtualenv::activate() {
+    export VIRTUAL_ENV_DISABLE_PROMPT=1;
+    export VENV_DIR;
+    source $VENV_DIR/bin/activate || return;
+    export PYSITE=$(python -m site | grep --color=none "$VIRTUAL_ENV" | grep --color=none site-packages | cut -d \' -f 2)
+}
+
+if [[ -f "$VENV_DIR/bin/activate" ]]; then
+    autoproject::virtualenv::activate; 
+fi
+
+# vim: ft=sh

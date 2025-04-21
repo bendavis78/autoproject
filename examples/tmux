@@ -1,0 +1,15 @@
+[[ -z "$TMUX_OLD_SESSION" ]] && export TMUX_OLD_SESSION=$(tmux display-message -p '#S');
+[[ -z "$TMUX_PROJECT" ]] && TMUX_PROJECT="$PROJECT";
+#[[ -z "$TMUX_PROJECT_ICON" ]] && TMUX_PROJECT_ICON=" ";
+#[[ -z "$TMUX_PROJECT_ICON" ]] && TMUX_PROJECT_ICON=" ";
+[[ -z "$TMUX_PROJECT_ICON" ]] && TMUX_PROJECT_ICON=" ";
+tmux rename-session "$TMUX_PROJECT_ICON $TMUX_PROJECT" 2> /dev/null || true
+tmux set -g status-left-length $((${#PROJECT} + 6))
+
+autoproject::tmux::on_exit() {
+    tmux rename-session $TMUX_OLD_SESSION 2> /dev/null || true
+}
+
+autoproject_on_exit+=(autoproject::tmux::on_exit)
+
+# vim: ft=sh
