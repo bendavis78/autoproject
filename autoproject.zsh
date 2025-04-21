@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
 
 # Exit codes
-[[ -z "$AUTOPROJECT_DIR_EXIT_CODE" ]] && AUTOPROJECT_DIR_EXIT_CODE=101;
+[[ -z "$AUTOPROJECT_RESET_EXIT_CODE" ]] && AUTOPROJECT_RESET_EXIT_CODE=101;
+[[ -z "$AUTOPROJECT_DIR_CHANGE_EXIT_CODE" ]] && AUTOPROJECT_DIR_CHANGE_EXIT_CODE=102;
 
 # Config paths
 [[ -z "$AUTOPROJECT_LIB_DIR" ]] && AUTOPROJECT_LIB_DIR="$XDG_CONFIG_HOME/autoproject/lib";
@@ -49,10 +50,8 @@ autoproject::check_projectrc_allowed() {
             md5sum $projectrc > $allowed_file;
             # Exit the current subshell with the special exit code
             # This will trigger a reload in the parent shell
-            echo $PWD > "$AUTOPROJECT_STATE_DIR/$project_id.exitdir";
-            exit $AUTOPROJECT_DIR_EXIT_CODE;
+            autoproject::reload;
         else
-            echo "Continuing with current environment (changes to .projectrc not applied)";
             # Update the allowed file to prevent future prompts for the same file
             md5sum $projectrc > $allowed_file;
         fi
@@ -83,25 +82,21 @@ autoproject::init() {
         local project_id="$PROJECT_ID";
         unset PROJECTRC;
         unset PROJECT_ID;
-        if [[ "$exit_code" == "$AUTOPROJECT_DIR_EXIT_CODE" ]]; then
-            local exitdir_file="$AUTOPROJECT_STATE_DIR/$project_id.exitdir";
-            if [[ -f "$exitdir_file" ]]; then
-                cd "$(cat $exitdir_file)";
-                rm "$exitdir_file";
-                
-                # Immediately re-process the project environment
-                # Clear the environment variables to force re-initialization
-                unset PROJECTRC;
-                unset PROJECT_ID;
-                unset PROJECT_DIR;
-                unset PROJECT;
-                
-                # Call init again to immediately process the new .projectrc
-                autoproject::init;
-            fi
-        else
-            # Normal exit
-            echo "Normal exit"
+
+        local exitdir_file="$AUTOPROJECT_STATE_DIR/$project_id.exitdir";
+        if [[ -f "$exitdir_file" ]]; then
+            # force-enter directory from exitdir_file
+            cd "$(cat $exitdir_file)";
+            rm "$exitdir_file";
+        fi
+
+        # Check exit code and handle accordingly
+        if [[ "$exit_code" == "$AUTOPROJECT_RESET_EXIT_CODE" ]]; then
+            # If we have come from a reset, re-enter the directory
+            # On the next prompt, it should trigger init in the directory
+            autoproject::init;
+        elif [[ "$exit_code" != "$AUTOPROJECT_DIR_CHANGE_EXIT_CODE" ]]; then
+            # On normal exit, just `exit`.
             exit $exit_code;
         fi
     elif [[ -n "$PROJECTRC" && -z "$PROJECT_DIR" ]]; then
@@ -117,9 +112,15 @@ autoproject::init() {
         source "$PROJECTRC";
     elif [[ -n "$PROJECT_DIR" && $PWD/ != $PROJECT_DIR/* ]]; then
         # We have left the project directory, exit the subshell
-        echo $PWD > "$AUTOPROJECT_STATE_DIR/$PROJECT_ID.exitdir";
-        exit $AUTOPROJECT_DIR_EXIT_CODE;
+        autoproject::reload "$AUTOPROJECT_DIR_CHANGE_EXIT_CODE";
     fi
+}
+
+autoproject::reload() {
+    [[ -z "$PROJECT_ID" ]] && return;
+    [[ -n "$1" ]] && exit_code="$1" || exit_code="$AUTOPROJECT_RESET_EXIT_CODE";
+    echo $PWD > "$AUTOPROJECT_STATE_DIR/$PROJECT_ID.exitdir";
+    exit "$exit_code";
 }
 
 autoproject::on_exit() {
@@ -127,7 +128,7 @@ autoproject::on_exit() {
     for exit_func in "${autoproject_on_exit[@]}"; do
         $exit_func
     done
-    fc -W
+    fc -W  # writes history to the HISTFILE
 }
 
 trap autoproject::on_exit EXIT
