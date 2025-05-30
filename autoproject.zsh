@@ -73,7 +73,8 @@ autoproject::init() {
     if [[ -n "$found_project_id" && -z "$PROJECT_ID" ]]; then
         export PROJECT_ID="$found_project_id";
 
-        # Enter subshell
+        # Enter subshell. This will start a new autoproject::init, but will
+        # start at the next elif below.
         zsh -i;
 
         # Subshell has exited
@@ -99,6 +100,7 @@ autoproject::init() {
             exit $exit_code;
         fi
     elif [[ -n "$PROJECTRC" && -z "$PROJECT_DIR" ]]; then
+        # This is where we start when we enter the from a subshell
         export PROJECT_DIR="$(dirname $PROJECTRC)";
         export PROJECT="$(basename $PROJECT_DIR)";
         function use() {
